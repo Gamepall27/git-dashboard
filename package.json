@@ -2,7 +2,16 @@
   "name": "git-dashboard",
   "version": "0.1.0",
   "description": "A cross-platform workspace for local Git repositories and configurable analytics",
-  "author": "Joshua Baumann",
+  "author": {
+    "name": "Joshua Baumann",
+    "email": "baumann@dial.de"
+  },
+  "homepage": "https://github.com/Gamepall27/git-dashboard",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Gamepall27/git-dashboard.git"
+  },
   "private": true,
   "main": "dist-electron/electron/main.js",
   "scripts": {
