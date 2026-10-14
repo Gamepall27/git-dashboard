@@ -1,12 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  Check,
-  ExternalLink,
-  FileCode2,
-  GitBranch,
-  GitCommitHorizontal,
-  Search,
-} from 'lucide-react';
+import { Check, ExternalLink, GitBranch, GitCommitHorizontal, Search } from 'lucide-react';
 import {
   defaultModules,
   type Commit,
@@ -18,6 +11,7 @@ import {
 import { api, fullDate, number, relativeDate, unwrap } from '../lib';
 import { Modules } from './Modules';
 import { EmptyState, ErrorMessage, LoadingRows } from './UI';
+import { GitWorkspace, type GitControls } from './GitWorkspace';
 
 export function RepositoryView({
   repository,
@@ -31,6 +25,7 @@ export function RepositoryView({
   onModulesChange,
   onError,
   revision,
+  gitControls,
 }: {
   repository: Repository;
   snapshot?: RepoSnapshot;
@@ -43,6 +38,7 @@ export function RepositoryView({
   onModulesChange: (configs: ModuleConfig[]) => Promise<boolean>;
   onError: (message: string) => void;
   revision: string;
+  gitControls: GitControls;
 }) {
   const [history, setHistory] = useState<HistoryPage>({ commits: [], hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -155,49 +151,12 @@ export function RepositoryView({
           )}
         </button>
       </div>
-      {showWorking && (
-        <section className="working-tree-panel">
-          <div className="section-heading">
-            <h2>Lokale Änderungen</h2>
-            <span className="muted">Index / Arbeitsverzeichnis</span>
-          </div>
-          {snapshot?.workingFiles.length ? (
-            <div className="working-files">
-              {snapshot.workingFiles.map((file) => (
-                <div className="working-file" key={file.path}>
-                  <span
-                    className={`file-status ${file.index === '?' ? 'untracked' : file.index === 'U' || file.working === 'U' ? 'conflict' : ''}`}
-                  >
-                    {file.index}
-                    {file.working}
-                  </span>
-                  <FileCode2 size={14} />
-                  <span className="mono">
-                    {file.originalPath ? `${file.originalPath} → ` : ''}
-                    {file.path}
-                  </span>
-                  <small className="muted">
-                    {file.index === '?'
-                      ? 'Neue Datei'
-                      : file.index === 'U' ||
-                          file.working === 'U' ||
-                          ['AA', 'DD'].includes(file.index + file.working)
-                        ? 'Konflikt'
-                        : file.index !== ' '
-                          ? 'Im Index'
-                          : 'Unstaged'}
-                  </small>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="working-clean">
-              <Check size={16} />
-              Keine lokalen Änderungen.
-            </div>
-          )}
-        </section>
-      )}
+      <GitWorkspace
+        repository={repository}
+        revision={`${revision}:${snapshot?.updatedAt ?? ''}`}
+        showWorking={showWorking}
+        controls={gitControls}
+      />
       <section className="history-section">
         <div className="section-heading">
           <h2>Commit-Historie</h2>

@@ -9,6 +9,7 @@ Eine Desktop-App für lokale Git-Repositories, gemeinsame Aktivitätsübersichte
 - **Commit-Historie:** jeweils 100 Commits nachladen, nach Nachricht/Hash/Autor suchen und nach Autor filtern. Suche und Autorenfilter gelten für die bereits geladenen Commits.
 - **Commit-Details:** vollständige Nachricht, Dateien, hinzugefügte/entfernte Zeilen, farbiger Diff und kopierbarer Hash.
 - **Lokaler Status:** neue, bearbeitete, gestagte und konfliktbehaftete Dateien sowie Ahead/Behind gegenüber dem vorhandenen lokalen Upstream-Stand.
+- **Git-Aktionen:** Fetch, Pull (Fast-forward/Rebase/Merge), Push und Force-with-lease; Dateien einzeln oder gemeinsam stagen/unstagen, committen und Amend. Branches wechseln/anlegen/umbenennen/löschen, Merge/Rebase/Cherry-pick/Revert, Stash, Tags, Reset, Remotes und lokale Git-Identität. Repositories klonen oder neu anlegen.
 - **Module:** hinzufügen, konfigurieren, umsortieren und entfernen; eigener Titel, Repository-Auswahl und Zeitraum (7/30/90/365 Tage oder gesamte Historie). Separate Zusammenstellungen für Startseite und jedes Repository.
 - **Dunkle/helle/System-Darstellung**, Tastaturkürzel und automatische Aktualisierung alle 60 Sekunden sowie bei Rückkehr zur App.
 
@@ -36,7 +37,19 @@ Zeilenstatistiken stammen aus `git log --numstat`: Additionen und Löschungen we
 
 Für Statistiken werden maximal die neuesten **20.000 erreichbaren Commits pro Repository** gelesen; bei Überschreitung erscheint ein Hinweis. Die Commit-Historie lässt sich unabhängig davon weiter nachladen. Zeitverlaufsdiagramme zeigen maximal 366 Tage, der Kalender maximal 13 Wochen; ihre jeweiligen Zeitraumfilter gelten zusätzlich. Diffs sind auf 500 KB begrenzt.
 
-Die App liest Git-Daten lokal und führt keinen Fetch, Checkout, Commit, Push oder sonstige Git-Schreiboperation aus. Remote-Branches und Ahead/Behind spiegeln daher den zuletzt lokal bekannten Stand wider. Bare-Repositories werden nicht unterstützt.
+Die automatische Aktualisierung liest nur lokale Git-Daten. Fetch, Pull, Push und andere Schreibaktionen werden ausschließlich über explizite Bedienung ausgelöst. Remote-Branches und Ahead/Behind spiegeln bis zum nächsten Fetch/Pull den zuletzt lokal bekannten Stand wider. Bare-Repositories werden nicht als Workspace-Repositories unterstützt.
+
+### Git bedienen
+
+Öffne ein Repository und klicke auf den lokalen Status, um den **Arbeitsbereich** mit getrennten Listen für gestagte und nicht gestagte Dateien zu öffnen. Nach Auswahl und Staging eine Commit-Nachricht eingeben und **Commit erstellen** wählen. Der Historien-Branchfilter und die Branches im Seitenbaum ändern nur die Anzeige; ein tatsächlicher Branchwechsel erfolgt über **Weitere Git-Aktionen**. Remote-Branches lassen sich dort als neue lokale Tracking-Branches auschecken.
+
+Die Aktionsleiste bietet **Fetch**, **Pull**, **Push** und **Weitere Git-Aktionen**. Git-Ausgabe und Fehler werden live im Ausgabedialog angezeigt; laufende Befehle lassen sich abbrechen. Operationen werden pro gemeinsamem Git-Verzeichnis serialisiert, auch bei verknüpften Worktrees. Nach jeder ausgeführten Aktion wird das betroffene Repository aktualisiert. Bei Merge-/Rebase-/Cherry-pick-/Revert-Konflikten zeigt der Arbeitsbereich **Fortsetzen**, **Operation abbrechen** sowie die betroffenen Dateien. „Unsere/Ihre Version“ folgt der Git-Semantik; beim Rebase können die Seiten gegenüber der Alltagssicht vertauscht sein.
+
+Verwerfen, Amend, Reset, Löschaktionen, Rebase und Force-with-lease benötigen eine Bestätigung mit Repository-Pfad und Befehl. Neue, unversionierte Dateien werden durch **Auswahl verwerfen** nicht gelöscht. Ein fehlgeschlagener oder abgebrochener Git-Befehl kann bereits Änderungen hinterlassen; es gibt keinen automatischen Rollback. Ein unterbrochener Clone wird ebenfalls nicht automatisch gelöscht. Ausgabe ist auf 512 KB begrenzt; einzelne Befehle haben ein Zeitlimit von drei Minuten.
+
+Für weitere nichtinteraktive Git-Funktionen gibt es **Eigener Git-Befehl** (mit Bestätigung, ohne Shell-Operatoren oder globale Optionen vor dem Unterbefehl). Konfigurierte Git-Aliase und Hooks können ausgeführt werden. Die Eingabe ist kein Sicherheits-Sandbox und kann über Git-Argumente auch andere Pfade betreffen. Für interaktive Funktionen wie `git add -p`, interaktiven Rebase oder grafische Merge-Tools öffnet **Terminal öffnen** ein Terminal im Repository-Ordner.
+
+Git verwendet vorhandene SSH-Schlüssel und Credential-Helper. Die App speichert keine Zugangsdaten und führt keine Terminal-Passwortabfragen durch; erstmalige Anmeldung, Passphrase-Abfragen und signierte Commits gegebenenfalls im Terminal erledigen. Die eigene Git-Konfiguration und Hooks bleiben wirksam. Details zu [Pull-Modi](https://git-scm.com/docs/git-pull), [Force-with-lease](https://git-scm.com/docs/git-push) und [Stash](https://git-scm.com/docs/git-stash) stehen in der Git-Dokumentation.
 
 ### Schrittweises Laden
 
@@ -67,7 +80,7 @@ npm test
 npm run test:e2e
 ```
 
-Die Fachtests erzeugen temporäre Git-Repositories und prüfen unter anderem leere Historien, Umbenennungen, Binärdateien, Merge-Zählung, Diffs und Persistenz. Die Desktop-Tests starten echtes Electron, öffnen mehrere Repositories, konfigurieren Module, prüfen Filter, Branches, lokale Änderungen und einen Neustart. Screenshots liegen anschließend in `test-results/ui/`.
+Die Fachtests erzeugen temporäre Git-Repositories und prüfen unter anderem leere Historien, Umbenennungen, Binärdateien, Merge-Zählung, Diffs und Persistenz sowie echte Git-Aktionen gegen lokale Bare-Remotes, Konflikte und Force-with-lease. Die Desktop-Tests starten echtes Electron, öffnen mehrere Repositories, konfigurieren Module, prüfen Filter, Staging/Commit/Push, Branchwechsel, Bestätigungen, Clone/Init und einen Neustart. Die Git-Aktionstests verändern ausschließlich temporäre Test-Repositories. Screenshots liegen anschließend in `test-results/ui/`.
 
 Unter Linux ohne Desktop: `xvfb-run --auto-servernum npm run test:e2e`.
 

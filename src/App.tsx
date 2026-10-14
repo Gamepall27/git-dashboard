@@ -26,6 +26,9 @@ import { CommitDetail } from './components/CommitDetail';
 import { DiscoverRepositories } from './components/DiscoverRepositories';
 import { ErrorMessage, IconButton, Modal } from './components/UI';
 import { useRepositoryLoading } from './useRepositoryLoading';
+import { useGitOperations } from './useGitOperations';
+import { GitConfirmation } from './components/GitDialogs';
+import { CreateRepository } from './components/CreateRepository';
 
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>({
@@ -53,6 +56,10 @@ export default function App() {
     syncRepositories,
     prioritize,
   } = useRepositoryLoading(workspace.repositories, setError);
+  const git = useGitOperations((id) => {
+    setBranches((previous) => ({ ...previous, [id]: 'HEAD' }));
+    void refresh([id]);
+  });
   useEffect(() => {
     let cancelled = false;
     async function init() {
@@ -300,6 +307,13 @@ export default function App() {
               onModulesChange={saveModules}
               onError={setError}
               revision={snapshots.find((s) => s.repository.id === active)?.historyVersion ?? ''}
+              gitControls={{
+                job: git.jobs[active],
+                run: (action) => git.run(active, action),
+                cancel: () => {
+                  void git.cancel(active).catch((e) => setError(e.message));
+                },
+              }}
             />
           )}
         </main>
@@ -393,6 +407,9 @@ export default function App() {
           onClose={() => setSelectedCommit(null)}
         />
       )}
+      {git.confirmation && (
+        <GitConfirmation plan={git.confirmation} onConfirm={git.resolveConfirmation} />
+      )}
     </div>
   );
 }
@@ -405,6 +422,7 @@ function AddRepositories({
   onAdded: (workspace: Workspace) => void;
 }) {
   const [paths, setPaths] = useState('');
+  const [mode, setMode] = useState<'open' | 'clone' | 'init'>('open');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const add = async (explicit?: string[]) => {
@@ -427,53 +445,82 @@ function AddRepositories({
       }}
     >
       <div className="modal-body">
-        <p className="muted">
-          Wähle lokale Ordner mit einem Git-Repository. Bereits geöffnete Repositories werden
-          erkannt.
-        </p>
-        <button
-          className="button secondary browse-button"
-          disabled={busy}
-          onClick={() => void add()}
-        >
-          <FolderOpen size={18} />
-          {busy ? 'Öffnen …' : 'Ordner auswählen …'}
-        </button>
-        <div className="form-divider">
-          <span>oder Pfade eingeben</span>
-        </div>
-        <form
-          id="add-repositories"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void add(
-              paths
-                .split('\n')
-                .map((p) => p.trim())
-                .filter(Boolean),
-            );
-          }}
-        >
-          <label className="form-field">
-            Repository-Pfade
-            <textarea
-              aria-label="Repository-Pfade"
-              value={paths}
-              rows={4}
-              placeholder={
-                window.gitDashboard?.platform === 'win32'
-                  ? 'C:\\Projekte\\mein-repository'
-                  : '/home/name/projekte/mein-repository'
-              }
+        <div className="repository-mode-tabs" aria-label="Repository hinzufügen">
+          {(
+            [
+              ['open', 'Öffnen'],
+              ['clone', 'Klonen'],
+              ['init', 'Neu anlegen'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              type="button"
+              className={mode === value ? 'active' : ''}
+              aria-pressed={mode === value}
+              key={value}
               disabled={busy}
-              onChange={(e) => setPaths(e.target.value)}
-            />
-          </label>
-          <span className="form-help">
-            Ein Pfad pro Zeile. Ein Unterordner des Repositories funktioniert ebenfalls.
-          </span>
-        </form>
-        {error && <ErrorMessage message={error} />}
+              onClick={() => {
+                setMode(value);
+                setError('');
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {mode !== 'open' ? (
+          <CreateRepository key={mode} type={mode} onAdded={onAdded} onBusy={setBusy} />
+        ) : (
+          <>
+            <p className="muted">
+              Wähle lokale Ordner mit einem Git-Repository. Bereits geöffnete Repositories werden
+              erkannt.
+            </p>
+            <button
+              className="button secondary browse-button"
+              disabled={busy}
+              onClick={() => void add()}
+            >
+              <FolderOpen size={18} />
+              {busy ? 'Öffnen …' : 'Ordner auswählen …'}
+            </button>
+            <div className="form-divider">
+              <span>oder Pfade eingeben</span>
+            </div>
+            <form
+              id="add-repositories"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void add(
+                  paths
+                    .split('\n')
+                    .map((p) => p.trim())
+                    .filter(Boolean),
+                );
+              }}
+            >
+              <label className="form-field">
+                Repository-Pfade
+                <textarea
+                  aria-label="Repository-Pfade"
+                  value={paths}
+                  rows={4}
+                  placeholder={
+                    window.gitDashboard?.platform === 'win32'
+                      ? 'C:\\Projekte\\mein-repository'
+                      : '/home/name/projekte/mein-repository'
+                  }
+                  disabled={busy}
+                  onChange={(e) => setPaths(e.target.value)}
+                />
+              </label>
+              <span className="form-help">
+                Ein Pfad pro Zeile. Ein Unterordner des Repositories funktioniert ebenfalls.
+              </span>
+            </form>
+            {error && <ErrorMessage message={error} />}
+          </>
+        )}
       </div>
       <footer className="modal-footer">
         <button className="button secondary" disabled={busy} onClick={onClose}>
@@ -481,11 +528,17 @@ function AddRepositories({
         </button>
         <button
           className="button primary"
-          form="add-repositories"
+          form={mode === 'open' ? 'add-repositories' : 'create-repository'}
           type="submit"
-          disabled={busy || !paths.trim()}
+          disabled={busy || (mode === 'open' && !paths.trim())}
         >
-          {busy ? 'Öffnen …' : 'Repositories öffnen'}
+          {busy
+            ? 'Bitte warten …'
+            : mode === 'open'
+              ? 'Repositories öffnen'
+              : mode === 'clone'
+                ? 'Repository klonen'
+                : 'Repository anlegen'}
         </button>
       </footer>
     </Modal>

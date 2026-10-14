@@ -13,10 +13,12 @@ import {
   type GitOperationResult,
   type RepositoryCreation,
 } from '../shared/git-actions';
-import { git, parseStatus } from './git';
+import { git, parseStatus, repositoryEnvironment } from './git';
 
 export function redact(text: string) {
-  return text.replace(/(https?:\/\/)[^\s/@]+:[^\s/@]+@/gi, '$1***@').replace(/\x1b\[[0-9;]*m/g, '');
+  return text
+    .replace(/(https?:\/\/)[^\s/@]+(?::[^\s/@]*)?@/gi, '$1***@')
+    .replace(/\x1b\[[0-9;]*m/g, '');
 }
 const optionalGit = (cwd: string, args: string[]) =>
   git(cwd, args).then(
@@ -175,7 +177,19 @@ export async function prepareAction(
           'Neue Dateien werden nicht gelöscht. Zum Verwerfen bitte nur versionierte Dateien auswählen.',
         );
       paths = [
-        ...new Set(selected.flatMap((f) => (f.originalPath ? [f.path, f.originalPath] : [f.path]))),
+        ...new Set(
+          selected.flatMap((f) => {
+            // Resetting a rename needs both paths; a staged rename's old path is
+            // no longer in the index and cannot be restored or added.
+            if (
+              f.originalPath &&
+              (action.type === 'unstage' ||
+                (action.type === 'stage' && !['R', 'C'].includes(f.index)))
+            )
+              return [f.path, f.originalPath];
+            return [f.path];
+          }),
+        ),
       ];
       const pathspec = ['--pathspec-from-file=-', '--pathspec-file-nul'];
       stdin = `${paths.join('\0')}\0`;
@@ -274,9 +288,12 @@ export async function prepareAction(
       break;
     }
     case 'switch': {
-      const branch = context.branches.find((b) => b.ref === action.ref && !b.remote);
-      if (!branch) throw new Error('Bitte einen vorhandenen lokalen Branch auswählen.');
-      args = ['switch', branch.name];
+      const branch = context.branches.find((b) => b.ref === action.ref);
+      if (!branch || branch.ref.endsWith('/HEAD'))
+        throw new Error('Bitte einen vorhandenen Branch auswählen.');
+      args = branch.remote
+        ? ['switch', '--track', '--', branch.ref]
+        : ['switch', '--', branch.name];
       label = 'Branch wechseln';
       break;
     }
@@ -296,7 +313,7 @@ export async function prepareAction(
     case 'branchDelete': {
       const branch = context.branches.find((b) => b.ref === action.ref && !b.remote && !b.current);
       if (!branch) throw new Error('Bitte einen anderen lokalen Branch auswählen.');
-      args = ['branch', '-d', branch.name];
+      args = ['branch', '-d', '--', branch.name];
       label = 'Branch löschen';
       warning = `Der lokale Branch „${branch.name}“ wird gelöscht. Git verweigert dies bei nicht zusammengeführten Commits.`;
       break;
@@ -372,7 +389,7 @@ export async function prepareAction(
     }
     case 'tagDelete':
       if (!context.tags.includes(action.ref)) throw new Error('Tag wurde nicht gefunden.');
-      args = ['tag', '-d', action.ref];
+      args = ['tag', '-d', '--', action.ref];
       label = 'Tag löschen';
       warning = 'Dieser lokale Tag wird entfernt. Remote-Tags bleiben erhalten.';
       break;
@@ -401,6 +418,8 @@ export async function prepareAction(
     case 'custom':
       args = parseGitCommand(action.command);
       label = 'Git-Befehl ausführen';
+      warning =
+        'Eigene Git-Befehle können Dateien, Referenzen, Konfiguration oder Remote-Repositories verändern. Auch konfigurierte Git-Aliase und Hooks können ausgeführt werden. Bitte den vollständigen Befehl und Repository-Pfad prüfen.';
       if (
         ['reset', 'clean', 'restore', 'checkout', 'switch', 'rebase'].includes(args[0]) ||
         args.some((arg) =>
@@ -461,7 +480,7 @@ export function executeCommand(
   signal.throwIfAborted();
   return new Promise((resolve) => {
     const env: NodeJS.ProcessEnv = {
-      ...process.env,
+      ...repositoryEnvironment(),
       GIT_TERMINAL_PROMPT: '0',
       GCM_INTERACTIVE: 'never',
       GIT_EDITOR: ':',
@@ -479,6 +498,7 @@ export function executeCommand(
     let truncated = false;
     let canceled = false;
     let settled = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
     const append = (text: string) => {
       const clean = redact(text);
       const available = 512_000 - output.length;
@@ -503,6 +523,13 @@ export function executeCommand(
         try {
           process.kill(-child.pid, 'SIGTERM');
         } catch {}
+        killTimer = setTimeout(() => {
+          if (!settled && child.pid) {
+            try {
+              process.kill(-child.pid, 'SIGKILL');
+            } catch {}
+          }
+        }, 2000);
       }
     };
     const timer = setTimeout(() => {
@@ -513,6 +540,7 @@ export function executeCommand(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      clearTimeout(killTimer);
       signal.removeEventListener('abort', cancel);
       if (error) append(`\n${error.message}\n`);
       resolve({
@@ -547,8 +575,9 @@ export async function creationCommand(
   const creation = input as RepositoryCreation;
   if (!creation || !['clone', 'init'].includes(creation.type))
     throw new Error('Ungültige Repository-Erstellung.');
-  const destination = text(creation.path, 'Zielpfad');
-  if (!path.isAbsolute(destination) || path.parse(destination).root === destination)
+  const requested = text(creation.path, 'Zielpfad');
+  const destination = path.resolve(requested);
+  if (!path.isAbsolute(requested) || path.parse(destination).root === destination)
     throw new Error('Bitte einen absoluten Projektordner auswählen.');
   const parent = path.dirname(destination);
   if (!(await stat(parent)).isDirectory())

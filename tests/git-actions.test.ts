@@ -11,10 +11,22 @@ import {
   repositoryLockKey,
   validatePlan,
 } from '../electron/git-actions';
-import { inspectRepository } from '../electron/git';
+import { inspectRepository, repositoryEnvironment } from '../electron/git';
 import { parseGitCommand, type GitAction } from '../shared/git-actions';
 
 describe('Git command input', () => {
+  it('does not inherit another repository or index from the app launch environment', () => {
+    expect(
+      repositoryEnvironment({
+        GIT_DIR: 'other',
+        GIT_WORK_TREE: 'other',
+        GIT_INDEX_FILE: 'outside',
+        GIT_COMMON_DIR: 'other',
+        GIT_SSH_COMMAND: 'ssh',
+        PATH: 'tools',
+      }),
+    ).toEqual({ GIT_SSH_COMMAND: 'ssh', PATH: 'tools' });
+  });
   it('supports quoted paths and Windows backslashes without executing shell syntax', () => {
     expect(parseGitCommand('git add "C:\\Projects\\file name.txt"')).toEqual([
       'add',
@@ -76,6 +88,11 @@ describe('Git actions in isolated repositories', () => {
   it('handles staged renames, stash, branch, tags and checkout preconditions', async () => {
     await rename(path.join(cwd, 'l.txt'), path.join(cwd, 'renamed ü.txt'));
     await action({ type: 'stageAll' });
+    await writeFile(path.join(cwd, 'renamed ü.txt'), 'second\nthird\n');
+    await action({ type: 'discard', paths: ['renamed ü.txt'] });
+    expect(await readFile(path.join(cwd, 'renamed ü.txt'), 'utf8')).toBe('second\n');
+    await writeFile(path.join(cwd, 'renamed ü.txt'), 'second\nthird\n');
+    await action({ type: 'stage', paths: ['renamed ü.txt'] });
     await action({ type: 'unstage', paths: ['renamed ü.txt'] });
     expect(run(cwd, 'diff', '--cached', '--name-only')).toBe('');
     await action({ type: 'stageAll' });
@@ -199,5 +216,31 @@ describe('Git actions in isolated repositories', () => {
     await expect(creationCommand({ type: 'init', path: cwd, branch: 'main' })).rejects.toThrow(
       'bereits',
     );
+  });
+  it('checks out a remote tracking branch and cancels a running Git process tree', async () => {
+    const bare = path.join(root, 'remote.git');
+    run(bare, 'branch', 'remote-review', 'main');
+    await action({ type: 'fetch' });
+    await action({ type: 'switch', ref: 'refs/remotes/origin/remote-review' });
+    expect(run(cwd, 'branch', '--show-current').trim()).toBe('remote-review');
+    expect(run(cwd, 'rev-parse', '--abbrev-ref', '@{upstream}').trim()).toBe(
+      'origin/remote-review',
+    );
+    await action({ type: 'switch', ref: 'refs/heads/main' });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 400);
+    const result = await executeCommand(
+      cwd,
+      ['-c', 'alias.wait=!node -e "setTimeout(() => {}, 10000)"', 'wait'],
+      undefined,
+      () => {},
+      controller.signal,
+    );
+    clearTimeout(timer);
+    expect(result.canceled).toBe(true);
+    expect(result.success).toBe(false);
+    const aborted = new AbortController();
+    aborted.abort();
+    expect(() => executeCommand(cwd, ['status'], undefined, () => {}, aborted.signal)).toThrow();
   });
 });

@@ -15,8 +15,23 @@ import type {
 
 const LOG_FORMAT = '%x1e%H%x00%h%x00%aN%x00%aE%x00%cI%x00%s%x00%P%x00%D%x00';
 export const MAX_STATS_COMMITS = 20_000;
+export function repositoryEnvironment(source: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const env = { ...source };
+  // An app launched from a Git hook must not inherit another worktree/index target.
+  for (const key of [
+    'GIT_DIR',
+    'GIT_WORK_TREE',
+    'GIT_COMMON_DIR',
+    'GIT_INDEX_FILE',
+    'GIT_OBJECT_DIRECTORY',
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+    'GIT_NAMESPACE',
+  ])
+    delete env[key];
+  return env;
+}
 const GIT_ENV = {
-  ...process.env,
+  ...repositoryEnvironment(),
   GIT_TERMINAL_PROMPT: '0',
   GIT_OPTIONAL_LOCKS: '0',
   LC_ALL: 'C.UTF-8',
