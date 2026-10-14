@@ -19,6 +19,7 @@ import {
 import { fullDate, number, relativeDate } from '../lib';
 import { EmptyState, LoadingRows } from './UI';
 import { Modules } from './Modules';
+import { useStatisticsSnapshots } from '../useStatistics';
 
 export function Overview({
   snapshots,
@@ -39,8 +40,13 @@ export function Overview({
   configs: ModuleConfig[];
   onModulesChange: (configs: ModuleConfig[]) => Promise<boolean>;
 }) {
-  const stats = useMemo(() => scopedCommits(snapshots, defaultModules()[0]), [snapshots]);
-  const authors = authorStats(stats);
+  const statisticInputs = useStatisticsSnapshots(snapshots);
+  const minute = Math.floor(Date.now() / 60_000);
+  const stats = useMemo(
+    () => scopedCommits(statisticInputs, defaultModules()[0]),
+    [statisticInputs, minute],
+  );
+  const authors = useMemo(() => authorStats(stats), [stats]);
   const hasStatistics = snapshots.some(
     (snapshot) => snapshot.statisticsComplete || snapshot.commits.length > 0,
   );

@@ -5,6 +5,20 @@ export interface ScopedCommit {
   repoId: string;
   repoName: string;
 }
+export function sameStatisticsInputs(previous: RepoSnapshot[], next: RepoSnapshot[]) {
+  return (
+    previous.length === next.length &&
+    previous.every((snapshot, i) => {
+      const other = next[i];
+      return (
+        snapshot.repository.id === other.repository.id &&
+        snapshot.repository.name === other.repository.name &&
+        snapshot.commits === other.commits &&
+        snapshot.error === other.error
+      );
+    })
+  );
+}
 export function dayKey(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }

@@ -45,6 +45,7 @@ Beim Öffnen vieler Repositories erscheinen zuerst ihre Übersichtsdaten (Branch
 Die Historie wird für einen Ladevorgang auf die zu Beginn erfassten Git-Revisionen fixiert, damit zwischenzeitliche neue Commits keine Seiten verschieben. Bei unveränderten Git-Referenzen und unveränderter `.mailmap` werden bereits geladene Statistikdaten innerhalb der geöffneten App weiterverwendet. Lokaler Status und letzte Commits werden trotzdem aktualisiert. Neue Repositories werden gezielt ergänzt; laufende, ersetzte Anfragen werden abgebrochen und angefangene Historien nach Möglichkeit fortgesetzt. Automatische Aktualisierungen überlappen sich nicht.
 
 Bereits nachgeladene Seiten der geöffneten Commit-Historie bleiben bei unveränderter Historie erhalten. Im Hintergrundprozess werden nur kleine Metadaten zwischengespeichert; komplette Historien werden nicht nochmals als Cache gehalten. Beim Neustart wird erneut schrittweise aus Git geladen.
+Bereits berechnete Modulauswertungen werden bei reinen Status- oder Branch-Metadatenupdates ebenfalls weiterverwendet. Neue Commit-Pakete, geänderte Repository-Auswahlen und Zeitfilter invalidieren diese Auswertungen; Arbeitsverzeichnis-Module zeigen weiterhin den aktuellen Status.
 
 ## Entwicklung
 

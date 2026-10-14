@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useState } from 'react';
+import { useDeferredValue, useState } from 'react';
 import {
   Activity,
   ArrowDown,
@@ -23,14 +23,7 @@ import {
   type Repository,
   type RepoSnapshot,
 } from '../../shared/types';
-import {
-  authorStats,
-  dailyStats,
-  hotspotStats,
-  repositoryStats,
-  scopedCommits,
-  weekdayStats,
-} from '../../shared/statistics';
+import { useStatistics } from '../useStatistics';
 import { number, shortDate } from '../lib';
 import { EmptyState, IconButton, LoadingRows, Modal } from './UI';
 
@@ -66,7 +59,10 @@ function ModuleContent({
   snapshots: RepoSnapshot[];
   pending: boolean;
 }) {
-  const commits = useMemo(() => scopedCommits(snapshots, config), [snapshots, config]);
+  const { commits, authors, repos, files, rows, calendar, allDays, days, daily } = useStatistics(
+    snapshots,
+    config,
+  );
   if (config.type === 'workingTree') {
     const repos = snapshots.filter(
       (s) => !config.repoIds.length || config.repoIds.includes(s.repository.id),
@@ -101,7 +97,6 @@ function ModuleContent({
   if (!commits.length && pending) return <LoadingRows />;
   if (!commits.length && config.type !== 'heatmap') return <ModuleEmpty />;
   if (config.type === 'authors') {
-    const authors = authorStats(commits);
     const max = Math.max(...authors.map((a) => a.additions + a.deletions), 1);
     return (
       <>
@@ -137,7 +132,6 @@ function ModuleContent({
     );
   }
   if (config.type === 'repositories') {
-    const repos = repositoryStats(commits);
     const max = Math.max(...repos.map((r) => r.commits), 1);
     return (
       <div className="ranking-list">
@@ -162,7 +156,6 @@ function ModuleContent({
     );
   }
   if (config.type === 'hotspots') {
-    const files = hotspotStats(commits);
     return (
       <div className="hotspot-list">
         {files.slice(0, 6).map((f) => (
@@ -187,7 +180,6 @@ function ModuleContent({
     );
   }
   if (config.type === 'weekdays') {
-    const rows = weekdayStats(commits);
     const max = Math.max(...rows.map((r) => r.count), 1);
     return (
       <>
@@ -209,7 +201,7 @@ function ModuleContent({
     );
   }
   if (config.type === 'heatmap') {
-    const days = dailyStats(commits, 91);
+    const days = calendar;
     const max = Math.max(...days.map((d) => d.count), 1);
     const offset = (days[0].date.getDay() + 6) % 7;
     return (
@@ -248,13 +240,6 @@ function ModuleContent({
       </>
     );
   }
-  const earliest = commits.reduce(
-    (earliest, c) => Math.min(earliest, new Date(c.commit.date).getTime()),
-    Date.now(),
-  );
-  const allDays = Math.ceil((Date.now() - earliest) / 86_400_000) + 1;
-  const days = Math.min(config.period || allDays, 366);
-  const daily = dailyStats(commits, days);
   const bucketSize = Math.max(1, Math.ceil(days / 60));
   const buckets = Array.from({ length: Math.ceil(days / bucketSize) }, (_, i) => {
     const slice = daily.slice(i * bucketSize, (i + 1) * bucketSize);

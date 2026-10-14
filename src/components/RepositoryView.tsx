@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
   ExternalLink,
@@ -52,6 +52,7 @@ export function RepositoryView({
   const [showWorking, setShowWorking] = useState(false);
   const [retry, setRetry] = useState(0);
   const generation = useRef(0);
+  const defaults = useMemo(() => defaultModules(repository.id), [repository.id]);
   useEffect(() => {
     const request = ++generation.current;
     setLoading(true);
@@ -296,7 +297,7 @@ export function RepositoryView({
         )}
       </section>
       <Modules
-        configs={configs ?? defaultModules(repository.id)}
+        configs={configs ?? defaults}
         snapshots={snapshots}
         repositories={repositories}
         onChange={onModulesChange}

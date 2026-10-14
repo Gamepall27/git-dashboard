@@ -3,6 +3,7 @@ import { RepositoryLoader } from '../electron/repository-loader';
 import type { RepositorySummary } from '../electron/git';
 import type { Commit, Repository, RepositoryLoadEvent, RepoSnapshot } from '../shared/types';
 import { applyRepositoryLoad } from '../shared/loading';
+import { sameStatisticsInputs } from '../shared/statistics';
 
 const repo = (id: string): Repository => ({ id, name: id, path: `/test/${id}` });
 const commit = (hash: string): Commit => ({
@@ -206,4 +207,25 @@ it('keeps cached arrays and ignores repositories removed during loading', () => 
   expect(applyRepositoryLoad([], event, new Set())).toEqual([]);
   const changed = { ...event, snapshot: summary(repo('a'), 'b'.repeat(64)).snapshot };
   expect(applyRepositoryLoad([current], changed, new Set(['a']))[0].commits).toEqual([]);
+});
+it('reuses statistics for metadata-only updates but invalidates changed data and errors', () => {
+  const original = { ...summary(repo('a')).snapshot, commits: [commit('one')] };
+  expect(
+    sameStatisticsInputs(
+      [original],
+      [
+        {
+          ...original,
+          branch: 'other',
+          workingFiles: [{ path: 'new', index: '?', working: '?' }],
+          statisticsComplete: true,
+        },
+      ],
+    ),
+  ).toBe(true);
+  expect(sameStatisticsInputs([original], [{ ...original, commits: [...original.commits] }])).toBe(
+    false,
+  );
+  expect(sameStatisticsInputs([original], [{ ...original, error: 'Unavailable' }])).toBe(false);
+  expect(sameStatisticsInputs([original], [])).toBe(false);
 });
