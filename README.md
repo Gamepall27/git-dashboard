@@ -26,6 +26,8 @@ Eine Desktop-App für lokale Git-Repositories, gemeinsame Aktivitätsübersichte
 
 Öffne Repositories über **Repository öffnen**: Ordner auswählen oder einen Pfad pro Zeile eingeben. Auch Unterordner werden auf die Repository-Wurzel aufgelöst. Geöffnete Repositories und Module werden beim nächsten Start wiederhergestellt. Das Entfernen aus dem Workspace löscht keine Dateien.
 
+Per Rechtsklick auf einen übergeordneten Ordner im Repository-Baum → **Auf weitere Repositories prüfen** werden seine direkten Unterordner nach weiteren Git-Repositories durchsucht. Der Auswahldialog zeigt alle Funde mit Checkboxen und **Alle auswählen**; bereits geöffnete Repositories sind markiert und werden nicht erneut hinzugefügt. Unterordner werden genau eine Ebene tief geprüft, einschließlich Git-Worktrees mit einer `.git`-Datei. Das Kontextmenü ist auch mit **Shift+F10** erreichbar.
+
 ### Wie die Zahlen entstehen
 
 Statistiken verwenden alle erreichbaren Branches und Tags sowie HEAD. Ein Commit wird innerhalb eines Repositories einmal gezählt. Sind zwei geöffnete Repositories Klone derselben Historie, zählt diese Historie in beiden Repositories. Personen werden nach E-Mail-Adresse gruppiert; Git berücksichtigt `.mailmap`. Der Zeitpunkt ist das Committer-Datum, Zeiträume beginnen am lokalen Tagesanfang. Merge-Commits werden aus den Statistikmodulen ausgeschlossen. Die Historienansicht enthält sie weiterhin.

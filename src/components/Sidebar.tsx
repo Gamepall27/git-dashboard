@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { Repository, RepoSnapshot } from '../../shared/types';
 import { IconButton } from './UI';
+import { FolderContextMenu, type FolderMenuPosition } from './FolderContextMenu';
 
 interface Props {
   repositories: Repository[];
@@ -24,6 +25,7 @@ interface Props {
   onAdd: () => void;
   onRemove: (id: string) => void;
   onSettings: () => void;
+  onScan: (repositoryId: string) => void;
 }
 export function Sidebar({
   repositories,
@@ -34,10 +36,13 @@ export function Sidebar({
   onAdd,
   onRemove,
   onSettings,
+  onScan,
 }: Props) {
   const [query, setQuery] = useState('');
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [folderMenu, setFolderMenu] = useState<FolderMenuPosition | null>(null);
+  const closeFolderMenu = useCallback(() => setFolderMenu(null), []);
   const toggle = (key: string, set: Set<string>, update: (value: Set<string>) => void) => {
     const next = new Set(set);
     next.has(key) ? next.delete(key) : next.add(key);
@@ -87,6 +92,28 @@ export function Sidebar({
               className="tree-parent"
               title={parent}
               aria-expanded={!collapsedGroups.has(parent)}
+              aria-haspopup="menu"
+              onContextMenu={(event) => {
+                event.preventDefault();
+                setFolderMenu({
+                  repositoryId: repos[0].id,
+                  x: event.clientX,
+                  y: event.clientY,
+                  trigger: event.currentTarget,
+                });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10')) {
+                  event.preventDefault();
+                  const rect = event.currentTarget.getBoundingClientRect();
+                  setFolderMenu({
+                    repositoryId: repos[0].id,
+                    x: rect.left,
+                    y: rect.bottom,
+                    trigger: event.currentTarget,
+                  });
+                }
+              }}
               onClick={() => toggle(parent, collapsedGroups, setCollapsedGroups)}
             >
               {collapsedGroups.has(parent) ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
@@ -186,6 +213,9 @@ export function Sidebar({
         Einstellungen
         <span className="local-dot" />
       </button>
+      {folderMenu && (
+        <FolderContextMenu position={folderMenu} onClose={closeFolderMenu} onScan={onScan} />
+      )}
     </aside>
   );
 }

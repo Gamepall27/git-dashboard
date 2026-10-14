@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { Result } from '../shared/types';
 import { allSnapshots, commitDetail, history, inspectRepository } from './git';
 import { WorkspaceStore } from './store';
+import { scanRepositories } from './discovery';
 
 export function registerIPC(store: WorkspaceStore) {
   function trusted(event: IpcMainInvokeEvent) {
@@ -59,6 +60,10 @@ export function registerIPC(store: WorkspaceStore) {
     return store.add(inspected);
   });
   handle('workspace:remove', (_, id: string) => store.remove(id));
+  handle('repos:scan-parent', (_, id: string) => {
+    const repository = store.find(id);
+    return scanRepositories(path.dirname(repository.path), store.read().repositories);
+  });
   handle(
     'settings:save',
     async (_, settings: unknown) => (await store.saveSettings(settings)).settings,

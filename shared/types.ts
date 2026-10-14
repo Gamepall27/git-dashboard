@@ -13,6 +13,14 @@ export interface Repository {
   path: string;
   name: string;
 }
+export interface DiscoveredRepository extends Repository {
+  alreadyOpen: boolean;
+}
+export interface RepositoryScan {
+  parentPath: string;
+  repositories: DiscoveredRepository[];
+  warnings: { path: string; error: string }[];
+}
 export interface Settings {
   theme: 'dark' | 'light' | 'system';
   modules: ModuleConfig[];
@@ -81,6 +89,7 @@ export interface DashboardAPI {
   platform: string;
   loadWorkspace(): Promise<Result<Workspace>>;
   addRepositories(paths?: string[]): Promise<Result<Workspace>>;
+  scanParentRepositories(repositoryId: string): Promise<Result<RepositoryScan>>;
   removeRepository(id: string): Promise<Result<Workspace>>;
   saveSettings(settings: Settings): Promise<Result<Settings>>;
   snapshots(): Promise<Result<RepoSnapshot[]>>;

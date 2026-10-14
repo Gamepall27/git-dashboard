@@ -24,6 +24,7 @@ import { Sidebar } from './components/Sidebar';
 import { Overview } from './components/Overview';
 import { RepositoryView } from './components/RepositoryView';
 import { CommitDetail } from './components/CommitDetail';
+import { DiscoverRepositories } from './components/DiscoverRepositories';
 import { ErrorMessage, IconButton, Modal } from './components/UI';
 
 export default function App() {
@@ -41,6 +42,7 @@ export default function App() {
   const [revision, setRevision] = useState(0);
   const [updatedAt, setUpdatedAt] = useState('');
   const [dialog, setDialog] = useState<'add' | 'settings' | null>(null);
+  const [scanningRepository, setScanningRepository] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [selectedCommit, setSelectedCommit] = useState<{ id: string; commit: Commit } | null>(null);
@@ -203,6 +205,7 @@ export default function App() {
         onAdd={() => setDialog('add')}
         onRemove={setRemoving}
         onSettings={() => setDialog('settings')}
+        onScan={setScanningRepository}
       />
       <div className="main-shell">
         <div className="tabbar">
@@ -335,6 +338,19 @@ export default function App() {
           settings={workspace.settings}
           onClose={() => setDialog(null)}
           onSave={saveSettings}
+        />
+      )}
+      {scanningRepository && (
+        <DiscoverRepositories
+          repositoryId={scanningRepository}
+          openedCount={workspace.repositories.length}
+          onClose={() => setScanningRepository(null)}
+          onAdded={(data) => {
+            setWorkspace(data);
+            setScanningRepository(null);
+            setError('');
+            void refresh();
+          }}
         />
       )}
       {removing && (

@@ -4,6 +4,7 @@ const api: DashboardAPI = {
   platform: process.platform,
   loadWorkspace: () => ipcRenderer.invoke('workspace:load'),
   addRepositories: (paths) => ipcRenderer.invoke('workspace:add', paths),
+  scanParentRepositories: (id) => ipcRenderer.invoke('repos:scan-parent', id),
   removeRepository: (id) => ipcRenderer.invoke('workspace:remove', id),
   saveSettings: (settings) => ipcRenderer.invoke('settings:save', settings),
   snapshots: () => ipcRenderer.invoke('repos:snapshots'),

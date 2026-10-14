@@ -1,6 +1,6 @@
 {
   "name": "git-dashboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A cross-platform workspace for local Git repositories and configurable analytics",
   "author": {
     "name": "Joshua Baumann",
