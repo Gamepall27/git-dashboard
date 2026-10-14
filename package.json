@@ -13,6 +13,8 @@
     "start": "electron .",
     "test": "vitest run",
     "test:e2e": "npm run build && playwright test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"
   },
@@ -29,6 +31,7 @@
     "@vitejs/plugin-react": "6.1.2",
     "electron": "44.7.2",
     "electron-builder": "26.15.3",
+    "prettier": "3.9.10",
     "typescript": "7.0.2",
     "vite": "8.3.4",
     "vitest": "5.0.4"
@@ -36,11 +39,37 @@
   "build": {
     "appId": "de.gamepall.gitdashboard",
     "productName": "Git Dashboard",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "dist-electron/**/*", "package.json"],
-    "win": { "target": ["nsis", "portable"] },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true },
-    "mac": { "target": ["dmg", "zip"], "category": "public.app-category.developer-tools" },
-    "linux": { "target": ["AppImage", "deb"], "category": "Development" }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
   }
 }
