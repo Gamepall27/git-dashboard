@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Check,
   FolderOpen,
@@ -15,7 +15,6 @@ import {
   defaultSettings,
   type Commit,
   type ModuleConfig,
-  type RepoSnapshot,
   type Settings,
   type Workspace,
 } from '../shared/types';
@@ -26,65 +25,42 @@ import { RepositoryView } from './components/RepositoryView';
 import { CommitDetail } from './components/CommitDetail';
 import { DiscoverRepositories } from './components/DiscoverRepositories';
 import { ErrorMessage, IconButton, Modal } from './components/UI';
+import { useRepositoryLoading } from './useRepositoryLoading';
 
 export default function App() {
   const [workspace, setWorkspace] = useState<Workspace>({
     repositories: [],
     settings: defaultSettings(),
   });
-  const [snapshots, setSnapshots] = useState<RepoSnapshot[]>([]);
   const [active, setActive] = useState('home');
   const [tabs, setTabs] = useState<string[]>([]);
   const [branches, setBranches] = useState<Record<string, string>>({});
-  const [refreshing, setRefreshing] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const [error, setError] = useState('');
-  const [revision, setRevision] = useState(0);
-  const [updatedAt, setUpdatedAt] = useState('');
   const [dialog, setDialog] = useState<'add' | 'settings' | null>(null);
   const [scanningRepository, setScanningRepository] = useState<string | null>(null);
   const [removing, setRemoving] = useState<string | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
   const [selectedCommit, setSelectedCommit] = useState<{ id: string; commit: Commit } | null>(null);
-  const refreshBusy = useRef(false);
-  const refreshPending = useRef(false);
-  const mounted = useRef(true);
-  const lastRefresh = useRef(0);
-  const refresh = useCallback(async function runRefresh(): Promise<void> {
-    if (!window.gitDashboard) return;
-    if (refreshBusy.current) {
-      refreshPending.current = true;
-      return;
-    }
-    refreshBusy.current = true;
-    setRefreshing(true);
-    try {
-      const data = unwrap(await api().snapshots());
-      if (mounted.current) {
-        setSnapshots(data);
-        setRevision((r) => r + 1);
-        setUpdatedAt(new Date().toISOString());
-        lastRefresh.current = Date.now();
-      }
-    } catch (e) {
-      if (mounted.current) setError((e as Error).message);
-    } finally {
-      refreshBusy.current = false;
-      if (mounted.current) setRefreshing(false);
-      if (refreshPending.current && mounted.current) {
-        refreshPending.current = false;
-        void runRefresh();
-      }
-    }
-  }, []);
+  const {
+    snapshots,
+    progress,
+    refreshing,
+    updatedAt,
+    lastRefresh,
+    busy,
+    refresh,
+    syncRepositories,
+    prioritize,
+  } = useRepositoryLoading(workspace.repositories, setError);
   useEffect(() => {
-    mounted.current = true;
     let cancelled = false;
     async function init() {
       try {
         const data = unwrap(await api().loadWorkspace());
         if (!cancelled) {
           setWorkspace(data);
+          syncRepositories(data.repositories);
           await refresh();
         }
       } catch (e) {
@@ -95,19 +71,18 @@ export default function App() {
     }
     void init();
     const timer = setInterval(() => {
-      if (document.visibilityState === 'visible') void refresh();
+      if (document.visibilityState === 'visible' && !busy.current) void refresh();
     }, 60_000);
     const focus = () => {
-      if (Date.now() - lastRefresh.current > 15_000) void refresh();
+      if (!busy.current && Date.now() - lastRefresh.current > 15_000) void refresh();
     };
     window.addEventListener('focus', focus);
     return () => {
       cancelled = true;
-      mounted.current = false;
       clearInterval(timer);
       window.removeEventListener('focus', focus);
     };
-  }, [refresh]);
+  }, [refresh, syncRepositories, busy, lastRefresh]);
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)');
     const apply = () => {
@@ -144,6 +119,7 @@ export default function App() {
   function openRepo(id: string, branch?: string) {
     setTabs((t) => (t.includes(id) ? t : [...t, id]));
     setActive(id);
+    prioritize(id);
     if (branch) setBranches((b) => ({ ...b, [id]: branch }));
   }
   function closeTab(id: string) {
@@ -181,10 +157,10 @@ export default function App() {
     try {
       const data = unwrap(await api().removeRepository(id));
       setWorkspace(data);
+      syncRepositories(data.repositories);
       closeTab(id);
-      setSnapshots((s) => s.filter((r) => r.repository.id !== id));
       setRemoving(null);
-      void refresh();
+      void refresh([]);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -194,6 +170,15 @@ export default function App() {
   const repository = workspace.repositories.find((r) => r.id === active);
   const selectedRepository = workspace.repositories.find((r) => r.id === selectedCommit?.id);
   const errors = snapshots.filter((s) => s.error).length;
+  const onRepositoriesAdded = (data: Workspace) => {
+    const addedIds = data.repositories
+      .filter((repo) => !workspace.repositories.some((existing) => existing.id === repo.id))
+      .map((repo) => repo.id);
+    setWorkspace(data);
+    syncRepositories(data.repositories);
+    setError('');
+    if (addedIds.length) void refresh(addedIds);
+  };
   return (
     <div className="app-shell">
       <Sidebar
@@ -267,6 +252,21 @@ export default function App() {
           role="tabpanel"
           aria-labelledby={`tab-${active}`}
         >
+          {progress && progress.total > 0 && (
+            <div
+              className="repository-load-progress"
+              role="status"
+              aria-label="Repository-Ladefortschritt"
+            >
+              <RefreshCw size={14} className="spin" />
+              <span>
+                {progress.phase === 'summaries' ? 'Repository-Übersichten' : 'Statistiken'}:{' '}
+                {progress.completed} / {progress.total} geladen
+                {progress.phase === 'statistics' ? ' · Daten werden schrittweise ergänzt' : ''}
+              </span>
+              <progress value={progress.completed} max={progress.total} />
+            </div>
+          )}
           {error && (
             <div className="global-error">
               <ErrorMessage message={error} />
@@ -299,7 +299,7 @@ export default function App() {
               configs={workspace.settings.repoModules[active]}
               onModulesChange={saveModules}
               onError={setError}
-              revision={revision}
+              revision={snapshots.find((s) => s.repository.id === active)?.historyVersion ?? ''}
             />
           )}
         </main>
@@ -307,7 +307,9 @@ export default function App() {
           <span>
             <span className={`local-dot ${errors ? 'warning-dot' : ''}`} />
             {refreshing
-              ? 'Git-Daten werden gelesen …'
+              ? progress
+                ? `${progress.phase === 'summaries' ? 'Übersichten' : 'Statistiken'} ${progress.completed}/${progress.total}`
+                : 'Git-Daten werden gelesen …'
               : errors
                 ? `${errors} Repository nicht verfügbar`
                 : 'Lokaler Workspace'}
@@ -326,10 +328,8 @@ export default function App() {
         <AddRepositories
           onClose={() => setDialog(null)}
           onAdded={(data) => {
-            setWorkspace(data);
+            onRepositoriesAdded(data);
             setDialog(null);
-            setError('');
-            void refresh();
           }}
         />
       )}
@@ -346,10 +346,8 @@ export default function App() {
           openedCount={workspace.repositories.length}
           onClose={() => setScanningRepository(null)}
           onAdded={(data) => {
-            setWorkspace(data);
+            onRepositoriesAdded(data);
             setScanningRepository(null);
-            setError('');
-            void refresh();
           }}
         />
       )}

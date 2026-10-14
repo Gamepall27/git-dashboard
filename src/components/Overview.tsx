@@ -41,11 +41,19 @@ export function Overview({
 }) {
   const stats = useMemo(() => scopedCommits(snapshots, defaultModules()[0]), [snapshots]);
   const authors = authorStats(stats);
+  const hasStatistics = snapshots.some(
+    (snapshot) => snapshot.statisticsComplete || snapshot.commits.length > 0,
+  );
   const recent = useMemo(
     () =>
       snapshots
         .filter((s) => !s.error)
-        .flatMap((s) => s.commits.slice(0, 12).map((commit) => ({ commit, repo: s.repository })))
+        .flatMap((s) =>
+          (s.recentCommits ?? s.commits.slice(0, 12)).map((preview) => ({
+            commit: s.commits.find((commit) => commit.hash === preview.hash) ?? preview,
+            repo: s.repository,
+          })),
+        )
         .sort((a, b) => new Date(b.commit.date).getTime() - new Date(a.commit.date).getTime())
         .slice(0, 8),
     [snapshots],
@@ -101,14 +109,14 @@ export function Overview({
             <div>
               <span>Commits · letzte 30 Tage</span>
               <strong>
-                {number(stats.length)}
+                {hasStatistics ? number(stats.length) : '—'}
                 <small>ohne Merge-Commits</small>
               </strong>
             </div>
             <div>
               <span>Aktive Personen</span>
               <strong>
-                {authors.length}
+                {hasStatistics ? authors.length : '—'}
                 <small>nach E-Mail-Adresse</small>
               </strong>
             </div>
@@ -116,14 +124,21 @@ export function Overview({
               <span>Geänderte Zeilen · 30 Tage</span>
               <strong className="summary-lines">
                 <span className="positive">
-                  +{number(authors.reduce((s, a) => s + a.additions, 0))}
+                  {hasStatistics ? `+${number(authors.reduce((s, a) => s + a.additions, 0))}` : '—'}
                 </span>
                 <span className="negative">
-                  −{number(authors.reduce((s, a) => s + a.deletions, 0))}
+                  {hasStatistics ? `−${number(authors.reduce((s, a) => s + a.deletions, 0))}` : '—'}
                 </span>
               </strong>
             </div>
           </div>
+          {repositories.some(
+            (repo) => !snapshots.find((s) => s.repository.id === repo.id)?.statisticsComplete,
+          ) && (
+            <div className="statistics-loading-note">
+              Statistiken sind ein Zwischenstand, solange Historien nachgeladen werden.
+            </div>
+          )}
           <section className="repos-section">
             <div className="section-heading">
               <h2>
@@ -131,9 +146,7 @@ export function Overview({
               </h2>
               <span className="muted">Neueste Aktivität über alle Branches</span>
             </div>
-            {loading && !snapshots.length ? (
-              <LoadingRows />
-            ) : (
+            {
               <div className="repo-table-wrap">
                 <table className="repo-table">
                   <thead>
@@ -148,7 +161,7 @@ export function Overview({
                   <tbody>
                     {repositories.map((repo) => {
                       const s = snapshots.find((r) => r.repository.id === repo.id);
-                      const latest = s?.commits[0];
+                      const latest = s?.recentCommits?.[0] ?? s?.commits[0];
                       return (
                         <tr key={repo.id}>
                           <td>
@@ -199,7 +212,9 @@ export function Overview({
                                 </small>
                               </button>
                             ) : (
-                              <span className="muted">Noch keine Commits</span>
+                              <span className="muted">
+                                {s ? 'Noch keine Commits' : 'Wartet auf Daten …'}
+                              </span>
                             )}
                           </td>
                           <td className="muted" title={latest ? fullDate(latest.date) : undefined}>
@@ -221,7 +236,7 @@ export function Overview({
                   </tbody>
                 </table>
               </div>
-            )}
+            }
           </section>
           <Modules
             configs={configs}
@@ -251,10 +266,14 @@ export function Overview({
                         {commit.author}
                       </small>
                     </span>
-                    <span className="line-count">
-                      <span className="positive">+{number(commit.additions)}</span>
-                      <span className="negative">−{number(commit.deletions)}</span>
-                    </span>
+                    {commit.statsLoaded === false ? (
+                      <span className="muted mono">Zeilen werden geladen …</span>
+                    ) : (
+                      <span className="line-count">
+                        <span className="positive">+{number(commit.additions)}</span>
+                        <span className="negative">−{number(commit.deletions)}</span>
+                      </span>
+                    )}
                     <span className="mono muted">{commit.shortHash}</span>
                     <span className="muted recent-date" title={fullDate(commit.date)}>
                       {relativeDate(commit.date)}
@@ -263,7 +282,7 @@ export function Overview({
                 ))}
               </div>
             ) : (
-              <EmptyState title="Noch keine Commits">
+              <EmptyState title={loading ? 'Commits werden geladen …' : 'Noch keine Commits'}>
                 Die ersten Commits deiner Repositories erscheinen hier.
               </EmptyState>
             )}

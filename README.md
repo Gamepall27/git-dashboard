@@ -38,6 +38,14 @@ Für Statistiken werden maximal die neuesten **20.000 erreichbaren Commits pro R
 
 Die App liest Git-Daten lokal und führt keinen Fetch, Checkout, Commit, Push oder sonstige Git-Schreiboperation aus. Remote-Branches und Ahead/Behind spiegeln daher den zuletzt lokal bekannten Stand wider. Bare-Repositories werden nicht unterstützt.
 
+### Schrittweises Laden
+
+Beim Öffnen vieler Repositories erscheinen zuerst ihre Übersichtsdaten (Branches, lokaler Status und die letzten zwölf Commits). Es werden maximal zwei Repositories gleichzeitig geprüft; fertige Ergebnisse werden sofort angezeigt. Die Statistiken folgen anschließend in Paketen von **250 Commits**, abwechselnd für die wartenden Repositories. Die aktive Ansicht erhält bevorzugt das nächste Paket. Ein Fortschrittsbalken zeigt den Ladezustand; Statistikwerte sind währenddessen als Zwischenstand gekennzeichnet.
+
+Die Historie wird für einen Ladevorgang auf die zu Beginn erfassten Git-Revisionen fixiert, damit zwischenzeitliche neue Commits keine Seiten verschieben. Bei unveränderten Git-Referenzen und unveränderter `.mailmap` werden bereits geladene Statistikdaten innerhalb der geöffneten App weiterverwendet. Lokaler Status und letzte Commits werden trotzdem aktualisiert. Neue Repositories werden gezielt ergänzt; laufende, ersetzte Anfragen werden abgebrochen und angefangene Historien nach Möglichkeit fortgesetzt. Automatische Aktualisierungen überlappen sich nicht.
+
+Bereits nachgeladene Seiten der geöffneten Commit-Historie bleiben bei unveränderter Historie erhalten. Im Hintergrundprozess werden nur kleine Metadaten zwischengespeichert; komplette Historien werden nicht nochmals als Cache gehalten. Beim Neustart wird erneut schrittweise aus Git geladen.
+
 ## Entwicklung
 
 Voraussetzungen: Node.js 24+, npm und Git im PATH.

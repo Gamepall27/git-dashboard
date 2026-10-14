@@ -37,6 +37,7 @@ export interface FileChange {
   binary: boolean;
 }
 export interface Commit {
+  statsLoaded?: boolean;
   hash: string;
   shortHash: string;
   author: string;
@@ -62,6 +63,10 @@ export interface Branch {
   remote: boolean;
 }
 export interface RepoSnapshot {
+  historyVersion?: string;
+  statisticsComplete?: boolean;
+  statisticsError?: string;
+  recentCommits?: Commit[];
   repository: Repository;
   branch: string;
   branches: Branch[];
@@ -85,6 +90,32 @@ export interface CommitDetail {
   truncated: boolean;
 }
 export type Result<T> = { ok: true; data: T } | { ok: false; error: string };
+export interface RepositoryLoadOptions {
+  ids?: string[];
+  priorityId?: string;
+  known: Record<string, { version: string; count: number; complete: boolean }>;
+}
+export type RepositoryLoadEvent =
+  | { type: 'summary'; requestId: string; snapshot: RepoSnapshot; preserveStatistics: boolean }
+  | {
+      type: 'commits';
+      requestId: string;
+      repositoryId: string;
+      commits: Commit[];
+      complete: boolean;
+      truncated: boolean;
+      error?: string;
+    }
+  | {
+      type: 'progress';
+      requestId: string;
+      phase: 'summaries' | 'statistics';
+      completed: number;
+      total: number;
+      currentId?: string;
+    }
+  | { type: 'complete'; requestId: string }
+  | { type: 'error'; requestId: string; error: string };
 export interface DashboardAPI {
   platform: string;
   loadWorkspace(): Promise<Result<Workspace>>;
@@ -92,7 +123,10 @@ export interface DashboardAPI {
   scanParentRepositories(repositoryId: string): Promise<Result<RepositoryScan>>;
   removeRepository(id: string): Promise<Result<Workspace>>;
   saveSettings(settings: Settings): Promise<Result<Settings>>;
-  snapshots(): Promise<Result<RepoSnapshot[]>>;
+  startRepositoryLoad(requestId: string, options: RepositoryLoadOptions): Promise<Result<void>>;
+  cancelRepositoryLoad(requestId: string): Promise<Result<void>>;
+  prioritizeRepositoryLoad(repositoryId: string): Promise<Result<void>>;
+  onRepositoryLoad(listener: (event: RepositoryLoadEvent) => void): () => void;
   history(id: string, branch: string, offset: number): Promise<Result<HistoryPage>>;
   commitDetail(id: string, hash: string): Promise<Result<CommitDetail>>;
   revealRepository(id: string): Promise<Result<void>>;

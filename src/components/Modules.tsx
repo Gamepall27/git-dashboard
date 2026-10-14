@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useDeferredValue, useMemo, useState } from 'react';
 import {
   Activity,
   ArrowDown,
@@ -32,7 +32,7 @@ import {
   weekdayStats,
 } from '../../shared/statistics';
 import { number, shortDate } from '../lib';
-import { EmptyState, IconButton, Modal } from './UI';
+import { EmptyState, IconButton, LoadingRows, Modal } from './UI';
 
 const icons: Record<ModuleType, typeof Activity> = {
   authors: UsersRound,
@@ -57,7 +57,15 @@ function ScopeLabel({ config, repos }: { config: ModuleConfig; repos: Repository
     </span>
   );
 }
-function ModuleContent({ config, snapshots }: { config: ModuleConfig; snapshots: RepoSnapshot[] }) {
+function ModuleContent({
+  config,
+  snapshots,
+  pending,
+}: {
+  config: ModuleConfig;
+  snapshots: RepoSnapshot[];
+  pending: boolean;
+}) {
   const commits = useMemo(() => scopedCommits(snapshots, config), [snapshots, config]);
   if (config.type === 'workingTree') {
     const repos = snapshots.filter(
@@ -82,12 +90,15 @@ function ModuleContent({ config, snapshots }: { config: ModuleConfig; snapshots:
               )}
             </div>
           ))
+        ) : pending ? (
+          <LoadingRows />
         ) : (
           <ModuleEmpty />
         )}
       </div>
     );
   }
+  if (!commits.length && pending) return <LoadingRows />;
   if (!commits.length && config.type !== 'heatmap') return <ModuleEmpty />;
   if (config.type === 'authors') {
     const authors = authorStats(commits);
@@ -307,6 +318,7 @@ interface Props {
   repoId?: string;
 }
 export function Modules({ configs, snapshots, repositories, onChange, repoId }: Props) {
+  const deferredSnapshots = useDeferredValue(snapshots);
   const [editing, setEditing] = useState<ModuleConfig | 'new' | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -404,7 +416,24 @@ export function Modules({ configs, snapshots, repositories, onChange, repoId }: 
               </header>
               <ScopeLabel config={config} repos={repositories} />
               <div className="module-body">
-                <ModuleContent config={config} snapshots={snapshots} />
+                <ModuleContent
+                  config={config}
+                  snapshots={deferredSnapshots}
+                  pending={repositories.some(
+                    (repo) =>
+                      (!config.repoIds.length || config.repoIds.includes(repo.id)) &&
+                      !snapshots.find((s) => s.repository.id === repo.id)?.statisticsComplete,
+                  )}
+                />
+                {snapshots.some(
+                  (s) =>
+                    s.statisticsError &&
+                    (!config.repoIds.length || config.repoIds.includes(s.repository.id)),
+                ) && (
+                  <div className="module-footnote negative">
+                    Ein Teil der Statistik konnte nicht geladen werden. Bitte aktualisieren.
+                  </div>
+                )}
               </div>
             </article>
           );

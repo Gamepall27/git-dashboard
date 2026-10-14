@@ -8,6 +8,7 @@ import {
   GitFork,
   LayoutGrid,
   Plus,
+  RefreshCw,
   Search,
   Settings2,
   X,
@@ -134,6 +135,8 @@ export function Sidebar({
                       >
                         {expanded.has(repo.id) ? (
                           <ChevronDown size={13} />
+                        ) : !snapshot ? (
+                          <RefreshCw size={11} className="spin" aria-hidden="true" />
                         ) : (
                           <ChevronRight size={13} />
                         )}
@@ -183,7 +186,11 @@ export function Sidebar({
                           ))
                         ) : (
                           <span className="tree-hint">
-                            {snapshot?.error ? 'Nicht verfügbar' : 'Noch keine Branches'}
+                            {!snapshot
+                              ? 'Branches werden geladen …'
+                              : snapshot.error
+                                ? 'Nicht verfügbar'
+                                : 'Noch keine Branches'}
                           </span>
                         )}
                       </div>

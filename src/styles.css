@@ -2114,3 +2114,38 @@ kbd {
   margin-top: 10px;
   color: var(--muted);
 }
+.repository-load-progress {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px 12px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  font-size: 11px;
+  background: var(--raised);
+}
+.repository-load-progress > span {
+  flex: 1;
+}
+.repository-load-progress progress {
+  width: 100px;
+  height: 5px;
+  accent-color: var(--accent);
+  border: 0;
+  border-radius: 3px;
+}
+.repository-load-progress progress::-webkit-progress-bar {
+  background: var(--inset);
+  border-radius: 3px;
+}
+.repository-load-progress progress::-webkit-progress-value {
+  background: var(--accent);
+  border-radius: 3px;
+}
+.statistics-loading-note {
+  font-size: 10px;
+  color: var(--dim);
+  margin: -16px 0 20px;
+}

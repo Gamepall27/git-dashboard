@@ -42,7 +42,7 @@ export function RepositoryView({
   configs?: ModuleConfig[];
   onModulesChange: (configs: ModuleConfig[]) => Promise<boolean>;
   onError: (message: string) => void;
-  revision: number;
+  revision: string;
 }) {
   const [history, setHistory] = useState<HistoryPage>({ commits: [], hasMore: false });
   const [loading, setLoading] = useState(true);
@@ -128,13 +128,20 @@ export function RepositoryView({
           <GitBranch size={14} />
           {snapshot?.branch || '—'}
         </span>
-        <span>{number(snapshot?.totalCommits ?? 0)} Commits über alle Branches</span>
+        <span>
+          {snapshot
+            ? `${number(snapshot.totalCommits)} Commits über alle Branches`
+            : 'Übersicht wird geladen …'}
+        </span>
         <button
           className={`working-toggle ${showWorking ? 'active' : ''}`}
           onClick={() => setShowWorking((s) => !s)}
           aria-expanded={showWorking}
+          disabled={!snapshot}
         >
-          {snapshot?.workingFiles.length ? (
+          {!snapshot ? (
+            'Status wird geladen …'
+          ) : snapshot.workingFiles.length ? (
             <>
               <span className="status-dot" />
               {snapshot.workingFiles.length} lokale Änderungen

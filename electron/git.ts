@@ -1,6 +1,6 @@
 import { execFile, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { realpath } from 'node:fs/promises';
+import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 import type {
   Branch,
@@ -22,9 +22,14 @@ const GIT_ENV = {
   LC_ALL: 'C.UTF-8',
 };
 
-export function git(cwd: string, args: string[]): Promise<string> {
+export function git(
+  cwd: string,
+  args: string[],
+  signal?: AbortSignal,
+  input?: string,
+): Promise<string> {
   return new Promise((resolve, reject) => {
-    execFile(
+    const child = execFile(
       'git',
       ['-c', 'core.quotepath=false', '-C', cwd, ...args],
       {
@@ -33,6 +38,7 @@ export function git(cwd: string, args: string[]): Promise<string> {
         env: GIT_ENV,
         timeout: 90_000,
         maxBuffer: 64 * 1024 * 1024,
+        signal,
       },
       (error, stdout, stderr) => {
         if (!error) return resolve(stdout);
@@ -49,7 +55,15 @@ export function git(cwd: string, args: string[]): Promise<string> {
         reject(new Error(stderr.trim() || error.message));
       },
     );
+    if (input !== undefined) {
+      child.stdin?.on('error', () => {});
+      child.stdin?.end(input);
+    }
   });
+}
+function gitRevisions(cwd: string, args: string[], revisions: string[], signal?: AbortSignal) {
+  // stdin also supports repositories with more refs than Windows' argument limit.
+  return git(cwd, [...args, '--stdin'], signal, `${revisions.join('\n')}\n`);
 }
 export function parseNumstat(raw: string): FileChange[] {
   const tokens = raw.split('\0');
@@ -135,7 +149,15 @@ async function branches(cwd: string): Promise<Branch[]> {
       return { name, ref, current: head === '*', remote: ref.startsWith('refs/remotes/') };
     });
 }
-export async function snapshot(repository: Repository): Promise<RepoSnapshot> {
+export interface RepositorySummary {
+  snapshot: RepoSnapshot;
+  revisions: string[];
+}
+export async function repositorySummary(
+  repository: Repository,
+  previous?: RepoSnapshot,
+  signal?: AbortSignal,
+): Promise<RepositorySummary> {
   const updatedAt = new Date().toISOString();
   const empty: RepoSnapshot = {
     repository,
@@ -148,67 +170,128 @@ export async function snapshot(repository: Repository): Promise<RepoSnapshot> {
     totalCommits: 0,
     truncated: false,
     updatedAt,
+    statisticsComplete: false,
+    recentCommits: [],
   };
   try {
-    await git(repository.path, ['rev-parse', '--git-dir']);
-    const [branch, refs, status, count, divergence] = await Promise.all([
-      git(repository.path, ['symbolic-ref', '--short', 'HEAD']).catch(() =>
-        git(repository.path, ['rev-parse', '--short', 'HEAD']).then(
-          (s) => `detached · ${s.trim()}`,
-        ),
+    const [branchName, head, refsRaw, status, divergence, mailmap] = await Promise.all([
+      git(repository.path, ['symbolic-ref', '--short', '-q', 'HEAD'], signal).catch(() => ''),
+      git(repository.path, ['rev-parse', '--verify', 'HEAD'], signal).catch(() => ''),
+      git(
+        repository.path,
+        [
+          'for-each-ref',
+          '--format=%(refname)%00%(refname:short)%00%(HEAD)%00%(objectname)%00%(objecttype)%00%(*objectname)%00%(*objecttype)',
+        ],
+        signal,
       ),
-      branches(repository.path),
-      git(repository.path, ['status', '--porcelain=v1', '-z', '--untracked-files=all']),
-      git(repository.path, ['rev-list', '--all', '--count']),
-      git(repository.path, ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}']).catch(
-        () => '0\t0',
+      git(repository.path, ['status', '--porcelain=v1', '-z', '--untracked-files=all'], signal),
+      git(
+        repository.path,
+        ['rev-list', '--left-right', '--count', 'HEAD...@{upstream}'],
+        signal,
+      ).catch(() => '0\t0'),
+      stat(path.join(repository.path, '.mailmap')).then(
+        (s) => `${s.mtimeMs}:${s.size}`,
+        () => '',
       ),
     ]);
-    const totalCommits = Number(count.trim());
-    const commits = totalCommits
-      ? parseLog(
-          await git(repository.path, [
-            'log',
-            '--all',
-            '--date-order',
-            `--max-count=${MAX_STATS_COMMITS + 1}`,
-            `--format=${LOG_FORMAT}`,
-            '--numstat',
-            '-z',
-            '--find-renames',
-            '--no-ext-diff',
-            '--no-textconv',
-          ]),
-        )
-      : [];
+    signal?.throwIfAborted();
+    const refs: Branch[] = [];
+    const tips = new Set<string>(head.trim() ? [head.trim()] : []);
+    for (const line of refsRaw.trim().split('\n').filter(Boolean)) {
+      const [ref, name, current, hash, type, peeledHash, peeledType] = line.split('\0');
+      if (ref.startsWith('refs/heads/') || ref.startsWith('refs/remotes/'))
+        refs.push({ name, ref, current: current === '*', remote: ref.startsWith('refs/remotes/') });
+      if (type === 'commit') tips.add(hash);
+      else if (peeledType === 'commit') tips.add(peeledHash);
+    }
+    const revisions = [...tips];
+    const historyVersion = createHash('sha256')
+      .update(`${refsRaw}\0${head}\0${mailmap}`)
+      .digest('hex');
+    const [totalCommits, recent] = await Promise.all([
+      previous?.historyVersion === historyVersion
+        ? Promise.resolve(previous.totalCommits)
+        : revisions.length
+          ? gitRevisions(repository.path, ['rev-list', '--count'], revisions, signal).then((s) =>
+              Number(s.trim()),
+            )
+          : Promise.resolve(0),
+      revisions.length
+        ? gitRevisions(
+            repository.path,
+            ['log', '--date-order', '--max-count=12', `--format=${LOG_FORMAT}`],
+            revisions,
+            signal,
+          ).then(parseLog)
+        : Promise.resolve([]),
+    ]);
     const [ahead, behind] = divergence.trim().split(/\s+/).map(Number);
     return {
-      ...empty,
-      branch: branch.trim(),
-      branches: refs,
-      workingFiles: parseStatus(status),
-      totalCommits,
-      commits: commits.slice(0, MAX_STATS_COMMITS),
-      truncated: commits.length > MAX_STATS_COMMITS,
-      ahead,
-      behind,
+      revisions,
+      snapshot: {
+        ...empty,
+        historyVersion,
+        branch: branchName.trim() || `detached · ${head.trim().slice(0, 7)}`,
+        branches: refs,
+        workingFiles: parseStatus(status),
+        totalCommits,
+        recentCommits: recent.map((commit) => ({ ...commit, statsLoaded: false })),
+        truncated: totalCommits > MAX_STATS_COMMITS,
+        statisticsComplete: totalCommits === 0,
+        ahead,
+        behind,
+      },
     };
   } catch (error) {
-    return { ...empty, error: (error as Error).message };
+    signal?.throwIfAborted();
+    return {
+      revisions: [],
+      snapshot: { ...empty, statisticsComplete: true, error: (error as Error).message },
+    };
   }
 }
-export async function allSnapshots(repositories: Repository[]): Promise<RepoSnapshot[]> {
-  const output: RepoSnapshot[] = new Array(repositories.length);
-  let cursor = 0;
-  await Promise.all(
-    Array.from({ length: Math.min(3, repositories.length) }, async () => {
-      while (cursor < repositories.length) {
-        const index = cursor++;
-        output[index] = await snapshot(repositories[index]);
-      }
-    }),
+export const STATISTICS_PAGE_SIZE = 250;
+export async function statisticsPage(
+  repository: Repository,
+  revisions: string[],
+  offset: number,
+  signal?: AbortSignal,
+): Promise<HistoryPage> {
+  if (!revisions.length) return { commits: [], hasMore: false };
+  const limit = Math.min(STATISTICS_PAGE_SIZE, MAX_STATS_COMMITS - offset);
+  if (limit <= 0) return { commits: [], hasMore: false };
+  const raw = await gitRevisions(
+    repository.path,
+    [
+      'log',
+      '--date-order',
+      `--max-count=${limit + 1}`,
+      `--skip=${offset}`,
+      `--format=${LOG_FORMAT}`,
+      '--numstat',
+      '-z',
+      '--find-renames',
+      '--no-ext-diff',
+      '--no-textconv',
+    ],
+    revisions,
+    signal,
   );
-  return output;
+  const commits = parseLog(raw);
+  return { commits: commits.slice(0, limit), hasMore: commits.length > limit };
+}
+// Full snapshot for diagnostics and integration tests; the UI uses streamed pages.
+export async function snapshot(repository: Repository): Promise<RepoSnapshot> {
+  const { snapshot: data, revisions } = await repositorySummary(repository);
+  if (data.error) return data;
+  while (data.commits.length < MAX_STATS_COMMITS) {
+    const page = await statisticsPage(repository, revisions, data.commits.length);
+    data.commits.push(...page.commits);
+    if (!page.hasMore) break;
+  }
+  return { ...data, statisticsComplete: true };
 }
 export async function history(
   repository: Repository,
