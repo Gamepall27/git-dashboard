@@ -131,6 +131,25 @@ export interface DashboardAPI {
   commitDetail(id: string, hash: string): Promise<Result<CommitDetail>>;
   revealRepository(id: string): Promise<Result<void>>;
   copyText(text: string): Promise<Result<void>>;
+  gitContext(id: string): Promise<Result<import('./git-actions').GitActionContext>>;
+  prepareGitAction(
+    id: string,
+    action: import('./git-actions').GitAction,
+  ): Promise<Result<import('./git-actions').GitActionPlan>>;
+  executeGitAction(
+    id: string,
+    token: string,
+    requestId: string,
+    confirmed: boolean,
+  ): Promise<Result<import('./git-actions').GitOperationResult>>;
+  cancelGitOperation(requestId: string): Promise<Result<void>>;
+  onGitOutput(listener: (event: import('./git-actions').GitOperationOutput) => void): () => void;
+  openTerminal(id: string): Promise<Result<void>>;
+  chooseDirectory(): Promise<Result<string | null>>;
+  createRepository(
+    requestId: string,
+    input: import('./git-actions').RepositoryCreation,
+  ): Promise<Result<{ workspace: Workspace; result: import('./git-actions').GitOperationResult }>>;
 }
 
 export const MODULE_TYPES: Record<ModuleType, { title: string; description: string }> = {

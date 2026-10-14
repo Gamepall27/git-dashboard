@@ -7,6 +7,7 @@ import { MAX_STATS_COMMITS, commitDetail, history, inspectRepository } from './g
 import { WorkspaceStore } from './store';
 import { scanRepositories } from './discovery';
 import { RepositoryLoader } from './repository-loader';
+import { registerGitIPC } from './git-ipc';
 
 export function registerIPC(store: WorkspaceStore) {
   const loads = new Map<
@@ -36,6 +37,9 @@ export function registerIPC(store: WorkspaceStore) {
       }
     });
   }
+  registerGitIPC(store, handle, (id) => {
+    for (const load of loads.values()) load.loader.forget(id);
+  });
   handle('workspace:load', () => store.read());
   handle('workspace:add', async (event, paths?: unknown) => {
     let selected: string[];
