@@ -1,13 +1,14 @@
 import { _electron as electron, expect, test, type ElectronApplication } from '@playwright/test';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
 const nodeRequire = createRequire(__filename);
 
 test('staging, commits, push, branch actions, confirmations and repository creation', async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), 'git-dashboard-actions-e2e-'));
+  // Windows runners may expose TEMP through an 8.3 alias; the app canonicalizes paths.
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'git-dashboard-actions-e2e-')));
   let app: ElectronApplication | undefined;
   const cwd = path.join(root, 'action-workspace');
   const bare = path.join(root, 'remote.git');
