@@ -4,7 +4,7 @@ import { realpath } from 'node:fs/promises';
 import path from 'node:path';
 import type { Branch, Commit, CommitDetail, FileChange, HistoryPage, Repository, RepoSnapshot, WorkingFile } from '../shared/types';
 
-const LOG_FORMAT = '%x1e%H%x00%h%x00%aN%x00%aE%x00%aI%x00%s%x00%P%x00%D%x00';
+const LOG_FORMAT = '%x1e%H%x00%h%x00%aN%x00%aE%x00%cI%x00%s%x00%P%x00%D%x00';
 export const MAX_STATS_COMMITS = 20_000;
 const GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C.UTF-8' };
 

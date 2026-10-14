@@ -74,6 +74,6 @@ export const PERIODS: { value: Period; label: string }[] = [
 ];
 export function defaultModules(repoId?: string): ModuleConfig[] {
   const types: ModuleType[] = repoId ? ['authors', 'timeline', 'hotspots', 'weekdays'] : ['authors', 'repositories', 'timeline', 'heatmap'];
-  return types.map((type, i) => ({ id: `default-${repoId ?? 'home'}-${i}`, type, title: MODULE_TYPES[type].title, repoIds: repoId ? [repoId] : [], period: 30 }));
+  return types.map((type, i) => ({ id: `default-${repoId ?? 'home'}-${i}`, type, title: MODULE_TYPES[type].title, repoIds: repoId ? [repoId] : [], period: type === 'heatmap' ? 90 : 30 }));
 }
 export function defaultSettings(): Settings { return { theme: 'dark', modules: defaultModules(), repoModules: {} }; }

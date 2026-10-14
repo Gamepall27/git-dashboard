@@ -1,4 +1,4 @@
-import { BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell } from 'electron';
 import type { IpcMainInvokeEvent } from 'electron';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -13,7 +13,7 @@ export function registerIPC(store: WorkspaceStore) {
     const dev = process.env.VITE_DEV_SERVER_URL;
     const allowedFile = path.resolve(__dirname, '../../dist/index.html');
     if (url.startsWith('file:') && fileURLToPath(url) === allowedFile) return;
-    if (dev && url.startsWith(`${dev}/`)) return;
+    if (!app.isPackaged && dev && url.startsWith(`${dev}/`)) return;
     throw new Error('Unzulässiger Ursprung.');
   }
   function handle<T>(channel: string, callback: (event: IpcMainInvokeEvent, ...args: any[]) => Promise<T> | T) {
